@@ -1,0 +1,162 @@
+package com.ctrip.framework.apollo.portal.listener;
+
+import com.ctrip.framework.apollo.common.constants.ReleaseOperation;
+import com.ctrip.framework.apollo.portal.environment.Env;
+import com.ctrip.framework.apollo.core.utils.ApolloThreadFactory;
+import com.ctrip.framework.apollo.portal.component.config.PortalConfig;
+import com.ctrip.framework.apollo.portal.component.emailbuilder.GrayPublishEmailBuilder;
+import com.ctrip.framework.apollo.portal.component.emailbuilder.MergeEmailBuilder;
+import com.ctrip.framework.apollo.portal.component.emailbuilder.NormalPublishEmailBuilder;
+import com.ctrip.framework.apollo.portal.component.emailbuilder.RollbackEmailBuilder;
+import com.ctrip.framework.apollo.portal.entity.bo.Email;
+import com.ctrip.framework.apollo.portal.entity.bo.ReleaseHistoryBO;
+import com.ctrip.framework.apollo.portal.service.ReleaseHistoryService;
+import com.ctrip.framework.apollo.portal.spi.EmailService;
+import com.ctrip.framework.apollo.portal.spi.MQService;
+import com.ctrip.framework.apollo.tracer.Tracer;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Component;
+
+import javax.annotation.PostConstruct;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * 监听发布事件
+ */
+@Component
+public class ConfigPublishListener {
+
+  private final ReleaseHistoryService releaseHistoryService;
+  private final EmailService emailService;
+  private final NormalPublishEmailBuilder normalPublishEmailBuilder;
+  private final GrayPublishEmailBuilder grayPublishEmailBuilder;
+  private final RollbackEmailBuilder rollbackEmailBuilder;
+  private final MergeEmailBuilder mergeEmailBuilder;
+  private final PortalConfig portalConfig;
+  private final MQService mqService;
+
+  private ExecutorService executorService;
+
+  public ConfigPublishListener(
+      final ReleaseHistoryService releaseHistoryService,
+      final EmailService emailService,
+      final NormalPublishEmailBuilder normalPublishEmailBuilder,
+      final GrayPublishEmailBuilder grayPublishEmailBuilder,
+      final RollbackEmailBuilder rollbackEmailBuilder,
+      final MergeEmailBuilder mergeEmailBuilder,
+      final PortalConfig portalConfig,
+      final MQService mqService) {
+    this.releaseHistoryService = releaseHistoryService;
+    this.emailService = emailService;
+    this.normalPublishEmailBuilder = normalPublishEmailBuilder;
+    this.grayPublishEmailBuilder = grayPublishEmailBuilder;
+    this.rollbackEmailBuilder = rollbackEmailBuilder;
+    this.mergeEmailBuilder = mergeEmailBuilder;
+    this.portalConfig = portalConfig;
+    this.mqService = mqService;
+  }
+
+  @PostConstruct
+  public void init() {
+    executorService = Executors.newSingleThreadExecutor(ApolloThreadFactory.create("ConfigPublishNotify", true));
+  }
+
+  @EventListener
+  public void onConfigPublish(ConfigPublishEvent event) {
+    executorService.submit(new ConfigPublishNotifyTask(event.getConfigPublishInfo()));
+  }
+
+
+  private class ConfigPublishNotifyTask implements Runnable {
+
+    private ConfigPublishEvent.ConfigPublishInfo publishInfo;
+
+    ConfigPublishNotifyTask(ConfigPublishEvent.ConfigPublishInfo publishInfo) {
+      this.publishInfo = publishInfo;
+    }
+
+    @Override
+    public void run() {
+      ReleaseHistoryBO releaseHistory = getReleaseHistory();
+      if (releaseHistory == null) {
+        Tracer.logError("Load release history failed", null);
+        return;
+      }
+
+      sendPublishEmail(releaseHistory);
+
+      sendPublishMsg(releaseHistory);
+    }
+
+    private ReleaseHistoryBO getReleaseHistory() {
+      Env env = publishInfo.getEnv();
+
+      int operation = publishInfo.isMergeEvent() ? ReleaseOperation.GRAY_RELEASE_MERGE_TO_MASTER :
+                      publishInfo.isRollbackEvent() ? ReleaseOperation.ROLLBACK :
+                      publishInfo.isNormalPublishEvent() ? ReleaseOperation.NORMAL_RELEASE :
+                      publishInfo.isGrayPublishEvent() ? ReleaseOperation.GRAY_RELEASE : -1;
+
+      if (operation == -1) {
+        return null;
+      }
+
+      if (publishInfo.isRollbackEvent()) {
+        return releaseHistoryService
+            .findLatestByPreviousReleaseIdAndOperation(env, publishInfo.getPreviousReleaseId(), operation);
+      }
+      return releaseHistoryService.findLatestByReleaseIdAndOperation(env, publishInfo.getReleaseId(), operation);
+
+    }
+
+    /**
+     * 发送邮件
+     * @param releaseHistory
+     */
+    private void sendPublishEmail(ReleaseHistoryBO releaseHistory) {
+      Env env = publishInfo.getEnv();
+
+      if (!portalConfig.emailSupportedEnvs().contains(env)) {
+        return;
+      }
+
+      int realOperation = releaseHistory.getOperation();
+
+      Email email = null;
+      try {
+        //构建邮件内容
+        email = buildEmail(env, releaseHistory, realOperation);
+      } catch (Throwable e) {
+        Tracer.logError("build email failed.", e);
+      }
+
+      if (email != null) {
+        emailService.send(email);
+      }
+    }
+
+    private void sendPublishMsg(ReleaseHistoryBO releaseHistory) {
+      mqService.sendPublishMsg(publishInfo.getEnv(), releaseHistory);
+    }
+
+    private Email buildEmail(Env env, ReleaseHistoryBO releaseHistory, int operation) {
+      switch (operation) {
+        case ReleaseOperation.GRAY_RELEASE: {//灰度发布
+          return grayPublishEmailBuilder.build(env, releaseHistory);
+        }
+        case ReleaseOperation.NORMAL_RELEASE: {//正常发布
+          return normalPublishEmailBuilder.build(env, releaseHistory);
+        }
+        case ReleaseOperation.ROLLBACK: {//回滚
+          return rollbackEmailBuilder.build(env, releaseHistory);
+        }
+        case ReleaseOperation.GRAY_RELEASE_MERGE_TO_MASTER: {
+          return mergeEmailBuilder.build(env, releaseHistory);
+        }
+        default:
+          return null;
+      }
+    }
+  }
+
+}

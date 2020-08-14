@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Compiled class file
 *.class
 
@@ -6,6 +7,11 @@
 
 # BlueJ files
 *.ctxt
+=======
+*.class
+.DS_Store
+application.pid
+>>>>>>> apollo
 
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
@@ -13,6 +19,7 @@
 # Package Files #
 *.jar
 *.war
+<<<<<<< HEAD
 *.nar
 *.ear
 *.zip
@@ -21,3 +28,24 @@
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
+=======
+*.ear
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+hs_err_pid*
+
+# Eclipse
+.classpath
+.project
+target
+.settings
+
+# Idea
+.idea
+*.iml
+
+# git
+*.orig
+.flattened-pom.xml
+
+>>>>>>> apollo
