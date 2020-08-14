@@ -203,7 +203,7 @@ public class NotificationControllerV2 implements ReleaseMessageListener {
      * for a very long time
      */
     // 手动关闭 EntityManager
-    // 因为对于 async 请求，Spring 在请求完成之前不会这样做
+    // 因为对于 async 请求，SpringMVC 在请求完成之前不会这样做
     // 这是不可接受的，因为我们正在做长轮询——意味着 db 连接将被保留很长时间。
     // 实际上，下面的过程，我们已经不需要 db 连接，因此进行关闭。
     entityManagerUtil.closeEntityManager();
@@ -213,7 +213,7 @@ public class NotificationControllerV2 implements ReleaseMessageListener {
         getApolloConfigNotifications(namespaces, clientSideNotifications, watchedKeysMap,
             latestReleaseMessages);
 
-    // 若有新的通知，直接设置结果
+    // 若有新的通知，直接设置结果 结束长轮询
     if (!CollectionUtils.isEmpty(newNotifications)) {
       deferredResultWrapper.setResult(newNotifications);
     }
@@ -221,6 +221,12 @@ public class NotificationControllerV2 implements ReleaseMessageListener {
     return deferredResultWrapper.getResult();
   }
 
+  /**
+   * 过滤并创建ApolloConfigNotification Map
+   * @param appId
+   * @param notifications
+   * @return
+   */
   private Map<String, ApolloConfigNotification> filterNotifications(String appId,
                                                                     List<ApolloConfigNotification> notifications) {
     Map<String, ApolloConfigNotification> filteredNotifications = Maps.newHashMap();
@@ -228,15 +234,24 @@ public class NotificationControllerV2 implements ReleaseMessageListener {
       if (Strings.isNullOrEmpty(notification.getNamespaceName())) {
         continue;
       }
+      // 若 Namespace 名以 .properties 结尾，移除该结尾，并设置到 ApolloConfigNotification 中。
+      // 例如 application.properties => application 。
       //strip out .properties suffix
       String originalNamespace = namespaceUtil.filterNamespaceName(notification.getNamespaceName());
       notification.setNamespaceName(originalNamespace);
+      // 获得归一化的 Namespace 名字。因为，客户端 Namespace 会填写错大小写。
+      // 例如，数据库中 Namespace 名为 Fx.Apollo ，而客户端 Namespace 名为 fx.Apollo
+      //      通过归一化后，统一为 Fx.Apollo
       //fix the character case issue, such as FX.apollo <-> fx.apollo
       String normalizedNamespace = namespaceUtil.normalizeNamespace(appId, originalNamespace);
 
       // in case client side namespace name has character case issue and has difference notification ids
       // such as FX.apollo = 1 but fx.apollo = 2, we should let FX.apollo have the chance to update its notification id
       // which means we should record FX.apollo = 1 here and ignore fx.apollo = 2
+      // 如果客户端 Namespace 的名字有大小写的问题，并且恰好有不同的通知编号。
+      // 例如 Namespace 名字为 FX.apollo 的通知编号是 1 ，但是 fx.apollo 的通知编号为 2 。
+      //     我们应该让 FX.apollo 可以更新它的通知编号，
+      //     所以，我们使用 FX.apollo 的 ApolloConfigNotification 对象，添加到结果，而忽略 fx.apollo 。
       if (filteredNotifications.containsKey(normalizedNamespace) &&
           filteredNotifications.get(normalizedNamespace).getNotificationId() < notification.getNotificationId()) {
         continue;

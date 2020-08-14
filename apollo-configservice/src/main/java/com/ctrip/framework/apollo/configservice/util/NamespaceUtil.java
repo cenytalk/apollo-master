@@ -17,6 +17,7 @@ public class NamespaceUtil {
   }
 
   public String filterNamespaceName(String namespaceName) {
+    // 若 Namespace 名以 .properties 结尾，移除该结尾，
     if (namespaceName.toLowerCase().endsWith(".properties")) {
       int dotIndex = namespaceName.lastIndexOf(".");
       return namespaceName.substring(0, dotIndex);
