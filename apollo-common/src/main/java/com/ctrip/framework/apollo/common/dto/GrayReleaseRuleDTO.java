@@ -5,6 +5,9 @@ import com.google.common.collect.Sets;
 
 import java.util.Set;
 
+/**
+ * 灰度发布规则DTO
+ */
 public class GrayReleaseRuleDTO extends BaseDTO {
 
   private String appId;
@@ -17,6 +20,11 @@ public class GrayReleaseRuleDTO extends BaseDTO {
 
   private Set<GrayReleaseRuleItemDTO> ruleItems;
 
+  /**
+   * Release 编号
+   *
+   * 更新灰度发布规则时，该参数不会传递
+   */
   private Long releaseId;
 
   public GrayReleaseRuleDTO(String appId, String clusterName, String namespaceName, String branchName) {

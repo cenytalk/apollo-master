@@ -24,6 +24,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 提供namespace分支的api
+ * 和灰度版本以及灰度发布有关系
+ */
 @RestController
 public class NamespaceBranchController {
 
@@ -60,6 +64,14 @@ public class NamespaceBranchController {
     return namespaceBO;
   }
 
+  /**
+   * 创建namespace分支
+   * @param appId
+   * @param env
+   * @param clusterName
+   * @param namespaceName
+   * @return
+   */
   @PreAuthorize(value = "@permissionValidator.hasModifyNamespacePermission(#appId, #namespaceName, #env)")
   @PostMapping(value = "/apps/{appId}/envs/{env}/clusters/{clusterName}/namespaces/{namespaceName}/branches")
   public NamespaceDTO createBranch(@PathVariable String appId,
@@ -94,7 +106,18 @@ public class NamespaceBranchController {
   }
 
 
-
+  /**
+   * 灰度全量发布，合并子namespace变更的配置Map到父namespace
+   * 并进行一次release
+   * @param appId
+   * @param env
+   * @param clusterName
+   * @param namespaceName
+   * @param branchName
+   * @param deleteBranch
+   * @param model
+   * @return
+   */
   @PreAuthorize(value = "@permissionValidator.hasReleaseNamespacePermission(#appId, #namespaceName, #env)")
   @PostMapping(value = "/apps/{appId}/envs/{env}/clusters/{clusterName}/namespaces/{namespaceName}/branches/{branchName}/merge")
   public ReleaseDTO merge(@PathVariable String appId, @PathVariable String env,
@@ -102,14 +125,18 @@ public class NamespaceBranchController {
                           @PathVariable String branchName, @RequestParam(value = "deleteBranch", defaultValue = "true") boolean deleteBranch,
                           @RequestBody NamespaceReleaseModel model) {
 
+    //若是紧急发布，但是当前环境未允许该操作，抛出BadRequestException
     if (model.isEmergencyPublish() && !portalConfig.isEmergencyPublishAllowed(Env.fromString(env))) {
       throw new BadRequestException(String.format("Env: %s is not supported emergency publish now", env));
     }
 
+    //apollo-portal侧使用DTO
+    //合并子namespace变更的配置Map到父namespace，并进行一次release
     ReleaseDTO createdRelease = namespaceBranchService.merge(appId, Env.valueOf(env), clusterName, namespaceName, branchName,
                                                              model.getReleaseTitle(), model.getReleaseComment(),
                                                              model.isEmergencyPublish(), deleteBranch);
 
+    //创建ConfigPublishEvent对象  这个有什么作用？
     ConfigPublishEvent event = ConfigPublishEvent.instance();
     event.withAppId(appId)
         .withCluster(clusterName)
@@ -118,6 +145,7 @@ public class NamespaceBranchController {
         .setMergeEvent(true)
         .setEnv(Env.valueOf(env));
 
+    //发布ConfigPublishEvent事件
     publisher.publishEvent(event);
 
     return createdRelease;
@@ -133,7 +161,15 @@ public class NamespaceBranchController {
     return namespaceBranchService.findBranchGrayRules(appId, Env.valueOf(env), clusterName, namespaceName, branchName);
   }
 
-
+  /**
+   * 更新namespace分支的灰度规则
+   * @param appId
+   * @param env
+   * @param clusterName
+   * @param namespaceName
+   * @param branchName
+   * @param rules
+   */
   @PreAuthorize(value = "@permissionValidator.hasOperateNamespacePermission(#appId, #namespaceName, #env)")
   @PutMapping(value = "/apps/{appId}/envs/{env}/clusters/{clusterName}/namespaces/{namespaceName}/branches/{branchName}/rules")
   public void updateBranchRules(@PathVariable String appId, @PathVariable String env,

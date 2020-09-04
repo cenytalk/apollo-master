@@ -51,8 +51,19 @@ public class NamespaceBranchService {
     return createBranch(appId, env, parentClusterName, namespaceName, operator);
   }
 
+
+  /**
+   * 创建分支
+   * @param appId
+   * @param env
+   * @param parentClusterName
+   * @param namespaceName
+   * @param operator
+   * @return
+   */
   @Transactional
   public NamespaceDTO createBranch(String appId, Env env, String parentClusterName, String namespaceName, String operator) {
+    //调用Admin Service接口创建分支
     NamespaceDTO createdBranch = namespaceBranchAPI.createBranch(appId, env, parentClusterName, namespaceName,
             operator);
 
@@ -68,6 +79,15 @@ public class NamespaceBranchService {
 
   }
 
+  /**
+   * 更新namespace分支的灰度规则
+   * @param appId
+   * @param env
+   * @param clusterName
+   * @param namespaceName
+   * @param branchName
+   * @param rules
+   */
   public void updateBranchGrayRules(String appId, Env env, String clusterName, String namespaceName,
                                     String branchName, GrayReleaseRuleDTO rules) {
 
@@ -80,6 +100,7 @@ public class NamespaceBranchService {
     rules.setDataChangeCreatedBy(operator);
     rules.setDataChangeLastModifiedBy(operator);
 
+    //调用接口 更新namespace分支的灰度规则
     namespaceBranchAPI.updateBranchGrayRules(appId, env, clusterName, namespaceName, branchName, rules);
 
     Tracer.logEvent(TracerEventType.UPDATE_GRAY_RELEASE_RULE,
@@ -101,7 +122,20 @@ public class NamespaceBranchService {
             String.format("%s+%s+%s+%s", appId, env, clusterName, namespaceName));
   }
 
-
+  /**
+   * 调用Admin Service Api 合并子namespace变更的配置Map到父namespace
+   * 并进行一次release
+   * @param appId
+   * @param env
+   * @param clusterName
+   * @param namespaceName
+   * @param branchName
+   * @param title
+   * @param comment
+   * @param isEmergencyPublish
+   * @param deleteBranch
+   * @return
+   */
   public ReleaseDTO merge(String appId, Env env, String clusterName, String namespaceName,
                           String branchName, String title, String comment,
                           boolean isEmergencyPublish, boolean deleteBranch) {
@@ -113,8 +147,10 @@ public class NamespaceBranchService {
                           String branchName, String title, String comment,
                           boolean isEmergencyPublish, boolean deleteBranch, String operator) {
 
+    //计算变化的item集合
     ItemChangeSets changeSets = calculateBranchChangeSet(appId, env, clusterName, namespaceName, branchName, operator);
 
+    //合并子namespace变更的配置Map到父namespace，并进行一次release
     ReleaseDTO mergedResult =
             releaseService.updateAndPublish(appId, env, clusterName, namespaceName, title, comment,
                     branchName, isEmergencyPublish, deleteBranch, changeSets);
@@ -125,25 +161,43 @@ public class NamespaceBranchService {
     return mergedResult;
   }
 
+  /**
+   * 计算变化的item集合
+   * @param appId
+   * @param env
+   * @param clusterName
+   * @param namespaceName
+   * @param branchName
+   * @param operator
+   * @return
+   */
   private ItemChangeSets calculateBranchChangeSet(String appId, Env env, String clusterName, String namespaceName,
                                                   String branchName, String operator) {
+    //apollo-portal侧用 BO 获取父namespaceBO对象
     NamespaceBO parentNamespace = namespaceService.loadNamespaceBO(appId, env, clusterName, namespaceName);
 
     if (parentNamespace == null) {
       throw new BadRequestException("base namespace not existed");
     }
 
+    //若父namespace有配置项的变更，不允许合并，因为可能存在冲突
     if (parentNamespace.getItemModifiedCnt() > 0) {
       throw new BadRequestException("Merge operation failed. Because master has modified items");
     }
 
+    //获得父namespace的item数组
     List<ItemDTO> masterItems = itemService.findItems(appId, env, clusterName, namespaceName);
 
+    //获得子namespace的item数组
     List<ItemDTO> branchItems = itemService.findItems(appId, env, branchName, namespaceName);
 
+    //计算变化的item集合
     ItemChangeSets changeSets = itemsComparator.compareIgnoreBlankAndCommentItem(parentNamespace.getBaseInfo().getId(),
-                                                                                 masterItems, branchItems);
+            masterItems, branchItems);
+    //设置 `ItemChangeSets.deleteItem` 为空。因为子 Namespace 从父 Namespace 继承配置，
+    // 但是实际自己没有那些配置项，所以如果不清空，会导致这些配置项被删除
     changeSets.setDeleteItems(Collections.emptyList());
+    //设置 `ItemChangeSets.dataChangeLastModifiedBy` 为当前管理员
     changeSets.setDataChangeLastModifiedBy(operator);
     return changeSets;
   }

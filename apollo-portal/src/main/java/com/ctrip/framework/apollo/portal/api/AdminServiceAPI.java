@@ -452,6 +452,11 @@ public class AdminServiceAPI {
     }
   }
 
+  /**
+   * 静态内部类
+   * 实现API抽象类
+   * 封装对Admin Service的namespace分支模块的API调用
+   */
   @Service
   public static class NamespaceBranchAPI extends API {
 

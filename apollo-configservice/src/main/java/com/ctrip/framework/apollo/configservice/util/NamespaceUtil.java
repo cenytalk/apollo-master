@@ -27,11 +27,13 @@ public class NamespaceUtil {
   }
 
   public String normalizeNamespace(String appId, String namespaceName) {
+    // 获得 App 下的 AppNamespace 对象
     AppNamespace appNamespace = appNamespaceServiceWithCache.findByAppIdAndNamespace(appId, namespaceName);
     if (appNamespace != null) {
       return appNamespace.getName();
     }
 
+    // 获取不到，说明该 Namespace 可能是关联的
     appNamespace = appNamespaceServiceWithCache.findPublicNamespaceByName(namespaceName);
     if (appNamespace != null) {
       return appNamespace.getName();

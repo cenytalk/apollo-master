@@ -13,6 +13,7 @@ import javax.persistence.PrePersist;
 import javax.persistence.Table;
 
 /**
+ * appId + clusterName + dataCenter + ip 组成唯一索引，通过这四个字段唯一一个实例( 客户端 )
  * @author Jason Song(song_s@ctrip.com)
  */
 @Entity
@@ -32,6 +33,9 @@ public class Instance {
   @Column(name = "DataCenter", nullable = false)
   private String dataCenter;
 
+  /**
+   * 客户端 IP
+   */
   @Column(name = "Ip", nullable = false)
   private String ip;
 

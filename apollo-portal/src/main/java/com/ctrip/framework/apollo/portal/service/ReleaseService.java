@@ -80,6 +80,7 @@ public class ReleaseService {
     return releaseDTO;
   }
 
+  //调用Admin Service API 合并子namespace变更的配置Map到父namespace，并进行一次release
   public ReleaseDTO updateAndPublish(String appId, Env env, String clusterName, String namespaceName,
                                      String releaseTitle, String releaseComment, String branchName,
                                      boolean isEmergencyPublish, boolean deleteBranch, ItemChangeSets changeSets) {

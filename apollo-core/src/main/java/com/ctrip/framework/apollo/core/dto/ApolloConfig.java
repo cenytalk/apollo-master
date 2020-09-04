@@ -15,6 +15,11 @@ public class ApolloConfig {
 
   private Map<String, String> configurations;//具体的配置项
 
+  /**
+   * Release Key
+   *
+   * 如果 {@link #configurations} 是多个 Release ，那 Release Key 是多个 `Release.releaseKey` 拼接，使用 '+' 拼接。
+   */
   private String releaseKey;//版本号
 
   public ApolloConfig() {

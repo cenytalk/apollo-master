@@ -140,6 +140,7 @@ public class ReleaseController {
 
   /**
    * merge branch items to master and publish master
+   * 合并子namespace变更的配置Map到父namespace,并进行一次release
    *
    * @return published result
    */
@@ -154,23 +155,28 @@ public class ReleaseController {
                                      @RequestParam(name = "releaseComment", required = false) String releaseComment,
                                      @RequestParam(name = "isEmergencyPublish", defaultValue = "false") boolean isEmergencyPublish,
                                      @RequestBody ItemChangeSets changeSets) {
+    //获得namespace
     Namespace namespace = namespaceService.findOne(appId, clusterName, namespaceName);
     if (namespace == null) {
       throw new NotFoundException(String.format("Could not find namespace for %s %s %s", appId,
                                                 clusterName, namespaceName));
     }
 
+    //合并子namespace变更的配置map到父namespace，并进行一次release
     Release release = releaseService.mergeBranchChangeSetsAndRelease(namespace, branchName, releaseName,
                                                                      releaseComment, isEmergencyPublish, changeSets);
 
+    //若需要删除子namespace，则进行删除
     if (deleteBranch) {
       namespaceBranchService.deleteBranch(appId, clusterName, namespaceName, branchName,
                                           NamespaceBranchStatus.MERGED, changeSets.getDataChangeLastModifiedBy());
     }
 
+    //发送release消息
     messageSender.sendMessage(ReleaseMessageKeyGenerator.generate(appId, clusterName, namespaceName),
                               Topics.APOLLO_RELEASE_TOPIC);
 
+    //将release转换成releaseDTO对象
     return BeanUtils.transform(ReleaseDTO.class, release);
 
   }

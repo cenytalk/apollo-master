@@ -15,6 +15,8 @@ public interface ConfigRepository {
 
   /**
    * Set the fallback repo for this repository.
+   * 设置上游的 Repository ,主要用于 LocalFileConfigRepository ，
+   * 从 Config Service 读取配置，缓存在本地文件
    * @param upstreamConfigRepository the upstream repo
    */
   public void setUpstreamRepository(ConfigRepository upstreamConfigRepository);

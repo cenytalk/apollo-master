@@ -151,26 +151,44 @@ public class ReleaseService {
     return releases;
   }
 
+  /**
+   * 合并子namespace的变更配置map到父namespace中
+   * 并进行一次release
+   * @param namespace
+   * @param branchName
+   * @param releaseName
+   * @param releaseComment
+   * @param isEmergencyPublish
+   * @param changeSets
+   * @return
+   */
   @Transactional
   public Release mergeBranchChangeSetsAndRelease(Namespace namespace, String branchName, String releaseName,
                                                  String releaseComment, boolean isEmergencyPublish,
                                                  ItemChangeSets changeSets) {
 
+    //校验锁定
     checkLock(namespace, isEmergencyPublish, changeSets.getDataChangeLastModifiedBy());
 
+    //将变更的配置集合itemchangesets对象，更新到父namespace中
     itemSetService.updateSet(namespace, changeSets);
 
+    //获得子namespace的最新且有效的release对象
     Release branchRelease = findLatestActiveRelease(namespace.getAppId(), branchName, namespace
         .getNamespaceName());
+    //获取releaseid
     long branchReleaseId = branchRelease == null ? 0 : branchRelease.getId();
 
+    //获取父namespace的配置map
     Map<String, String> operateNamespaceItems = getNamespaceItems(namespace);
 
+    //创建map,用于releasehistory对象的'operationContext'属性
     Map<String, Object> operationContext = Maps.newLinkedHashMap();
     operationContext.put(ReleaseOperationContext.SOURCE_BRANCH, branchName);
     operationContext.put(ReleaseOperationContext.BASE_RELEASE_ID, branchReleaseId);
     operationContext.put(ReleaseOperationContext.IS_EMERGENCY_PUBLISH, isEmergencyPublish);
 
+    //父namespace进行发布
     return masterRelease(namespace, releaseName, releaseComment, operateNamespaceItems,
                          changeSets.getDataChangeLastModifiedBy(),
                          ReleaseOperation.GRAY_RELEASE_MERGE_TO_MASTER, operationContext);
@@ -234,16 +252,31 @@ public class ReleaseService {
     return release;
   }
 
+  /**
+   * 发布子namespace的配置项，用于灰度发布
+   * @param parentNamespace
+   * @param childNamespace
+   * @param childNamespaceItems 子namespace的配置项
+   * @param releaseName
+   * @param releaseComment
+   * @param operator
+   * @param isEmergencyPublish
+   * @param grayDelKeys ??? 这个是干嘛用的
+   * @return
+   */
   private Release publishBranchNamespace(Namespace parentNamespace, Namespace childNamespace,
                                          Map<String, String> childNamespaceItems,
                                          String releaseName, String releaseComment,
                                          String operator, boolean isEmergencyPublish, Set<String> grayDelKeys) {
+    //获得父namespace最后有效release对象
     Release parentLatestRelease = findLatestActiveRelease(parentNamespace);
+    //获取父namespace的配置项
     Map<String, String> parentConfigurations = parentLatestRelease != null ?
             gson.fromJson(parentLatestRelease.getConfigurations(),
                     GsonType.CONFIG) : new LinkedHashMap<>();
     long baseReleaseId = parentLatestRelease == null ? 0 : parentLatestRelease.getId();
 
+    //合并父namespace和子namespace的配置项，
     Map<String, String> configsToPublish = mergeConfiguration(parentConfigurations, childNamespaceItems);
 
     if(!(grayDelKeys == null || grayDelKeys.size()==0)){
@@ -252,6 +285,7 @@ public class ReleaseService {
       }
     }
 
+    //发布子namespace的配置项
     return branchRelease(parentNamespace, childNamespace, releaseName, releaseComment,
         configsToPublish, baseReleaseId, operator, ReleaseOperation.GRAY_RELEASE, isEmergencyPublish,
         childNamespaceItems.keySet());

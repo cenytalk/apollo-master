@@ -14,6 +14,10 @@ import javax.persistence.PreUpdate;
 import javax.persistence.Table;
 
 /**
+ * Instance Config 实体，记录 Instance 对 Namespace 的配置的获取情况。
+ * 如果一个 Instance 使用了多个 Namespace ，则会记录多条 InstanceConfig
+ *
+ * instanceId + configAppId + ConfigNamespaceName 组成唯一索引，因为一个 Instance 可以使用多个 Namespace
  * @author Jason Song(song_s@ctrip.com)
  */
 @Entity
@@ -24,6 +28,9 @@ public class InstanceConfig {
   @Column(name = "Id")
   private long id;
 
+  /**
+   * Instance 编号，指向 {@link Instance#id}
+   */
   @Column(name = "InstanceId")
   private long instanceId;
 
@@ -36,9 +43,15 @@ public class InstanceConfig {
   @Column(name = "ConfigNamespaceName", nullable = false)
   private String configNamespaceName;
 
+  /**
+   * Release Key ，对应 {@link Release#releaseKey}
+   */
   @Column(name = "ReleaseKey", nullable = false)
   private String releaseKey;
 
+  /**
+   * 配置下发时间
+   */
   @Column(name = "ReleaseDeliveryTime", nullable = false)
   private Date releaseDeliveryTime;
 

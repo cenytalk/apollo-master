@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * config service with no cache
+ * 配置 Service 默认实现类，直接查询数据库，而不使用缓存
  *
  * @author Jason Song(song_s@ctrip.com)
  */
